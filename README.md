@@ -175,12 +175,30 @@ Better for automated systems or managing multiple accounts:
 6. Grant the service account access to your Google Ads accounts
 7. Create a Google Ads API Developer token (see below)
 
+#### Option C: gcloud/ADC (Application Default Credentials)
+
+Best if you already use Google Cloud SDK and want a no-keys flow:
+
+1. Install Google Cloud SDK (gcloud)
+2. Authenticate for ADC: `gcloud auth application-default login`
+3. Set environment variables for the MCP server:
+   - `GOOGLE_ADS_AUTH_TYPE=gcloud`
+   - `GOOGLE_ADS_DEVELOPER_TOKEN=YOUR_TOKEN`
+   - Optional: `GOOGLE_ADS_LOGIN_CUSTOMER_ID=YOUR_MANAGER_ACCOUNT_ID`
+4. That’s it. No client ID/secret or key file needed. Tokens refresh automatically.
+
+Optional CLI fallback:
+- If ADC is not available, you can enable CLI fallback via `GOOGLE_ADS_GCLOUD_USE_CLI=true`.
+- This makes the server invoke `gcloud auth print-access-token --scopes=https://www.googleapis.com/auth/adwords` at runtime.
+- Use only when necessary; ADC is preferred.
+
 #### Authentication Token Refreshing
 
 The application now includes robust token refresh handling:
 
 - **OAuth 2.0 Tokens**: The tool will automatically refresh expired OAuth tokens when possible, or prompt for re-authentication if the refresh token is invalid.
 - **Service Account Tokens**: Service account tokens are automatically generated and refreshed as needed without user intervention.
+- **gcloud/ADC Tokens**: Application Default Credentials refresh automatically. If CLI fallback is enabled, tokens are retrieved from gcloud on demand.
 
 #### Authentication Method Comparison
 
@@ -355,10 +373,11 @@ The Google Ads MCP now supports environment file configuration for easier setup.
 3. Set the following values in your `.env` file:
 
    ```
-   # Authentication Type: "oauth" or "service_account"
+   # Authentication Type: "oauth", "service_account", or "gcloud"
    GOOGLE_ADS_AUTH_TYPE=oauth
    
    # Path to your credentials file (OAuth client secret or service account key)
+   # Not required when GOOGLE_ADS_AUTH_TYPE=gcloud (ADC)
    GOOGLE_ADS_CREDENTIALS_PATH=/path/to/your/credentials.json
    
    # Your Google Ads Developer Token
@@ -366,6 +385,10 @@ The Google Ads MCP now supports environment file configuration for easier setup.
    
    # Optional: Manager Account ID (if applicable)
    GOOGLE_ADS_LOGIN_CUSTOMER_ID=your_manager_account_id
+
+   # Optional: if ADC is not available and you want to use gcloud CLI token
+   # retrieval as a fallback (requires gcloud installed)
+   GOOGLE_ADS_GCLOUD_USE_CLI=false
    ```
 
 4. Save the file.
@@ -385,8 +408,7 @@ You can also set environment variables directly in your system or in the configu
       "command": "/FULL/PATH/TO/mcp-google-ads-main/.venv/bin/python",
       "args": ["/FULL/PATH/TO/mcp-google-ads-main/google_ads_server.py"],
       "env": {
-        "GOOGLE_ADS_AUTH_TYPE": "oauth",
-        "GOOGLE_ADS_CREDENTIALS_PATH": "/FULL/PATH/TO/mcp-google-ads-main/credentials.json",
+        "GOOGLE_ADS_AUTH_TYPE": "gcloud",
         "GOOGLE_ADS_DEVELOPER_TOKEN": "YOUR_DEVELOPER_TOKEN_HERE",
         "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "YOUR_MANAGER_ACCOUNT_ID_HERE"
       }
@@ -404,8 +426,7 @@ You can also set environment variables directly in your system or in the configu
       "command": "/FULL/PATH/TO/mcp-google-ads-main/.venv/bin/python",
       "args": ["/FULL/PATH/TO/mcp-google-ads-main/google_ads_server.py"],
       "env": {
-        "GOOGLE_ADS_AUTH_TYPE": "oauth",
-        "GOOGLE_ADS_CREDENTIALS_PATH": "/FULL/PATH/TO/mcp-google-ads-main/credentials.json",
+        "GOOGLE_ADS_AUTH_TYPE": "gcloud",
         "GOOGLE_ADS_DEVELOPER_TOKEN": "YOUR_DEVELOPER_TOKEN_HERE",
         "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "YOUR_MANAGER_ACCOUNT_ID_HERE"
       }

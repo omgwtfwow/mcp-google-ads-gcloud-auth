@@ -11,6 +11,8 @@ from google.oauth2.credentials import Credentials
 from google.oauth2 import service_account
 from google.auth.transport.requests import Request
 from google.auth.exceptions import RefreshError
+from google import auth as google_auth
+import subprocess
 import logging
 
 # MCP
@@ -47,7 +49,8 @@ except ImportError:
 GOOGLE_ADS_CREDENTIALS_PATH = os.environ.get("GOOGLE_ADS_CREDENTIALS_PATH")
 GOOGLE_ADS_DEVELOPER_TOKEN = os.environ.get("GOOGLE_ADS_DEVELOPER_TOKEN")
 GOOGLE_ADS_LOGIN_CUSTOMER_ID = os.environ.get("GOOGLE_ADS_LOGIN_CUSTOMER_ID", "")
-GOOGLE_ADS_AUTH_TYPE = os.environ.get("GOOGLE_ADS_AUTH_TYPE", "oauth")  # oauth or service_account
+GOOGLE_ADS_AUTH_TYPE = os.environ.get("GOOGLE_ADS_AUTH_TYPE", "oauth")  # oauth, service_account, gcloud/adc
+GOOGLE_ADS_GCLOUD_USE_CLI = os.environ.get("GOOGLE_ADS_GCLOUD_USE_CLI", "false").lower() in ("1", "true", "yes")
 
 def format_customer_id(customer_id: str) -> str:
     """Format customer ID to ensure it's 10 digits without dashes."""
@@ -74,12 +77,30 @@ def get_credentials():
     Returns:
         Valid credentials object to use with Google Ads API
     """
-    if not GOOGLE_ADS_CREDENTIALS_PATH:
-        raise ValueError("GOOGLE_ADS_CREDENTIALS_PATH environment variable not set")
-    
     auth_type = GOOGLE_ADS_AUTH_TYPE.lower()
     logger.info(f"Using authentication type: {auth_type}")
-    
+
+    # gcloud/ADC authentication
+    if auth_type in ("gcloud", "adc"):
+        try:
+            creds = get_gcloud_credentials()
+            if creds is not None:
+                return creds
+        except Exception as e:
+            logger.warning(f"ADC not available or failed: {str(e)}")
+        # Optional CLI fallback
+        if GOOGLE_ADS_GCLOUD_USE_CLI:
+            token = get_gcloud_cli_token()
+            if token:
+                return {"access_token": token, "type": "gcloud_cli"}
+            else:
+                raise ValueError("Failed to obtain access token from gcloud CLI. Ensure gcloud is installed and you are logged in.")
+        raise ValueError("ADC credentials not found. Run 'gcloud auth application-default login' or set GOOGLE_ADS_GCLOUD_USE_CLI=true for CLI fallback.")
+
+    # Validate credentials path only for oauth/service_account
+    if not GOOGLE_ADS_CREDENTIALS_PATH:
+        raise ValueError("GOOGLE_ADS_CREDENTIALS_PATH environment variable not set")
+
     # Service Account authentication
     if auth_type == "service_account":
         try:
@@ -90,6 +111,34 @@ def get_credentials():
     
     # OAuth 2.0 authentication (default)
     return get_oauth_credentials()
+
+def get_gcloud_credentials():
+    """Get credentials using Application Default Credentials (ADC) via gcloud.
+
+    Requires the user to have run 'gcloud auth application-default login'.
+    """
+    logger.info("Attempting to load ADC credentials via google.auth.default")
+    creds, _ = google_auth.default(scopes=SCOPES)
+    return creds
+
+def get_gcloud_cli_token() -> Optional[str]:
+    """Obtain an access token by invoking the gcloud CLI.
+
+    Returns a token string or None on failure.
+    """
+    try:
+        cmd = [
+            "gcloud",
+            "auth",
+            "print-access-token",
+            f"--scopes={SCOPES[0]}",
+        ]
+        logger.info("Invoking gcloud to print access token for adwords scope")
+        out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True).strip()
+        return out if out else None
+    except Exception as e:
+        logger.error(f"gcloud CLI token retrieval failed: {str(e)}")
+        return None
 
 def get_service_account_credentials():
     """Get credentials using a service account key file."""
@@ -207,7 +256,9 @@ def get_headers(creds):
         raise ValueError("GOOGLE_ADS_DEVELOPER_TOKEN environment variable not set")
     
     # Handle different credential types
-    if isinstance(creds, service_account.Credentials):
+    if isinstance(creds, dict) and creds.get("access_token"):
+        token = creds["access_token"]
+    elif isinstance(creds, service_account.Credentials):
         # For service account, we need to get a new bearer token
         auth_req = Request()
         creds.refresh(auth_req)
