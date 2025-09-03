@@ -51,6 +51,7 @@ GOOGLE_ADS_DEVELOPER_TOKEN = os.environ.get("GOOGLE_ADS_DEVELOPER_TOKEN")
 GOOGLE_ADS_LOGIN_CUSTOMER_ID = os.environ.get("GOOGLE_ADS_LOGIN_CUSTOMER_ID", "")
 GOOGLE_ADS_AUTH_TYPE = os.environ.get("GOOGLE_ADS_AUTH_TYPE", "oauth")  # oauth, service_account, gcloud/adc
 GOOGLE_ADS_GCLOUD_USE_CLI = os.environ.get("GOOGLE_ADS_GCLOUD_USE_CLI", "false").lower() in ("1", "true", "yes")
+GOOGLE_ADS_QUOTA_PROJECT_ID = os.environ.get("GOOGLE_ADS_QUOTA_PROJECT_ID", "")
 
 def format_customer_id(customer_id: str) -> str:
     """Format customer ID to ensure it's 10 digits without dashes."""
@@ -116,9 +117,33 @@ def get_gcloud_credentials():
     """Get credentials using Application Default Credentials (ADC) via gcloud.
 
     Requires the user to have run 'gcloud auth application-default login'.
+    Returns a tuple of (credentials, quota_project_id)
     """
     logger.info("Attempting to load ADC credentials via google.auth.default")
-    creds, _ = google_auth.default(scopes=SCOPES)
+    creds, project_id = google_auth.default(scopes=SCOPES)
+    
+    # Try to get quota project from ADC file if not returned
+    if not project_id:
+        try:
+            import json
+            import os
+            adc_path = os.path.expanduser("~/.config/gcloud/application_default_credentials.json")
+            if os.path.exists(adc_path):
+                with open(adc_path, 'r') as f:
+                    adc_data = json.load(f)
+                    project_id = adc_data.get('quota_project_id')
+                    if project_id:
+                        logger.info(f"Found quota_project_id in ADC file: {project_id}")
+        except Exception as e:
+            logger.debug(f"Could not read quota project from ADC file: {e}")
+    
+    # Store project_id in credentials for later use
+    if project_id and hasattr(creds, '_quota_project_id'):
+        creds._quota_project_id = project_id
+    elif project_id:
+        # Store as attribute even if not officially supported
+        creds.quota_project_id = project_id
+    
     return creds
 
 def get_gcloud_cli_token() -> Optional[str]:
@@ -287,6 +312,22 @@ def get_headers(creds):
         'developer-token': GOOGLE_ADS_DEVELOPER_TOKEN,
         'content-type': 'application/json'
     }
+    
+    # Add quota project header if available (needed for ADC with user credentials)
+    quota_project_id = None
+    if hasattr(creds, 'quota_project_id'):
+        quota_project_id = creds.quota_project_id
+    elif hasattr(creds, '_quota_project_id'):
+        quota_project_id = creds._quota_project_id
+    
+    # Fall back to environment variable if not in credentials
+    if not quota_project_id and GOOGLE_ADS_QUOTA_PROJECT_ID:
+        quota_project_id = GOOGLE_ADS_QUOTA_PROJECT_ID
+        logger.info(f"Using quota project from environment: {quota_project_id}")
+    
+    if quota_project_id:
+        headers['x-goog-user-project'] = quota_project_id
+        logger.info(f"Using quota project: {quota_project_id}")
     
     if GOOGLE_ADS_LOGIN_CUSTOMER_ID:
         headers['login-customer-id'] = format_customer_id(GOOGLE_ADS_LOGIN_CUSTOMER_ID)
