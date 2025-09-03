@@ -180,12 +180,16 @@ Better for automated systems or managing multiple accounts:
 Best if you already use Google Cloud SDK and want a no-keys flow:
 
 1. Install Google Cloud SDK (gcloud)
-2. Authenticate for ADC: `gcloud auth application-default login`
+2. Authenticate for ADC with Google Ads scope: 
+   ```bash
+   gcloud auth application-default login --scopes=https://www.googleapis.com/auth/adwords,https://www.googleapis.com/auth/cloud-platform
+   ```
+   **Important:** You MUST include the `--scopes` parameter with the Google Ads scope, otherwise you'll get "insufficient authentication scopes" errors.
 3. Set environment variables for the MCP server:
    - `GOOGLE_ADS_AUTH_TYPE=gcloud`
    - `GOOGLE_ADS_DEVELOPER_TOKEN=YOUR_TOKEN`
    - Optional: `GOOGLE_ADS_LOGIN_CUSTOMER_ID=YOUR_MANAGER_ACCOUNT_ID`
-4. That’s it. No client ID/secret or key file needed. Tokens refresh automatically.
+4. That's it. No client ID/secret or key file needed. Tokens refresh automatically.
 
 Optional CLI fallback:
 - If ADC is not available, you can enable CLI fallback via `GOOGLE_ADS_GCLOUD_USE_CLI=true`.
