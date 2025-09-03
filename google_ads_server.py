@@ -138,11 +138,15 @@ def get_gcloud_credentials():
             logger.debug(f"Could not read quota project from ADC file: {e}")
     
     # Store project_id in credentials for later use
-    if project_id and hasattr(creds, '_quota_project_id'):
-        creds._quota_project_id = project_id
-    elif project_id:
-        # Store as attribute even if not officially supported
-        creds.quota_project_id = project_id
+    if project_id:
+        logger.info(f"Setting quota_project_id on credentials: {project_id}")
+        if hasattr(creds, '_quota_project_id'):
+            creds._quota_project_id = project_id
+        else:
+            # Store as attribute even if not officially supported
+            creds.quota_project_id = project_id
+    else:
+        logger.warning("No quota_project_id found in ADC")
     
     return creds
 
@@ -277,12 +281,16 @@ def get_oauth_credentials():
 
 def get_headers(creds):
     """Get headers for Google Ads API requests."""
+    logger.info(f"get_headers called with creds type: {type(creds)}")
+    logger.info(f"Environment GOOGLE_ADS_QUOTA_PROJECT_ID: {GOOGLE_ADS_QUOTA_PROJECT_ID}")
+    
     if not GOOGLE_ADS_DEVELOPER_TOKEN:
         raise ValueError("GOOGLE_ADS_DEVELOPER_TOKEN environment variable not set")
     
     # Handle different credential types
     if isinstance(creds, dict) and creds.get("access_token"):
         token = creds["access_token"]
+        logger.info("Using dict credentials (likely from gcloud CLI)")
     elif isinstance(creds, service_account.Credentials):
         # For service account, we need to get a new bearer token
         auth_req = Request()
