@@ -53,6 +53,9 @@ GOOGLE_ADS_AUTH_TYPE = os.environ.get("GOOGLE_ADS_AUTH_TYPE", "oauth")  # oauth,
 GOOGLE_ADS_GCLOUD_USE_CLI = os.environ.get("GOOGLE_ADS_GCLOUD_USE_CLI", "false").lower() in ("1", "true", "yes")
 GOOGLE_ADS_QUOTA_PROJECT_ID = os.environ.get("GOOGLE_ADS_QUOTA_PROJECT_ID", "")
 
+logger.info(f"Loaded GOOGLE_ADS_LOGIN_CUSTOMER_ID: {GOOGLE_ADS_LOGIN_CUSTOMER_ID}")
+logger.info(f"Loaded GOOGLE_ADS_QUOTA_PROJECT_ID: {GOOGLE_ADS_QUOTA_PROJECT_ID}")
+
 def format_customer_id(customer_id: str) -> str:
     """Format customer ID to ensure it's 10 digits without dashes."""
     # Convert to string if passed as integer or another type
@@ -338,7 +341,13 @@ def get_headers(creds):
         logger.info(f"Using quota project: {quota_project_id}")
     
     if GOOGLE_ADS_LOGIN_CUSTOMER_ID:
-        headers['login-customer-id'] = format_customer_id(GOOGLE_ADS_LOGIN_CUSTOMER_ID)
+        formatted_login_id = format_customer_id(GOOGLE_ADS_LOGIN_CUSTOMER_ID)
+        headers['login-customer-id'] = formatted_login_id
+        logger.info(f"Added login-customer-id header: {formatted_login_id}")
+    else:
+        logger.info("No login-customer-id set")
+    
+    logger.info(f"Final headers (excluding token): developer-token={headers.get('developer-token', 'NOT SET')}, login-customer-id={headers.get('login-customer-id', 'NOT SET')}, x-goog-user-project={headers.get('x-goog-user-project', 'NOT SET')}")
     
     return headers
 
